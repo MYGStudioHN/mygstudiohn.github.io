@@ -58,6 +58,22 @@
   .error p{color:var(--gris);font-size:14px;line-height:1.55;max-width:34ch}
   .error a{color:var(--azul);font-size:14px}
 
+  /* Aviso cuando la app no contesta. No tapa la pantalla: si la app sí cargó
+     pero no avisó (una versión vieja), se sigue viendo y usando. */
+  .aviso{
+    position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));
+    background:#1A1F26;border:1px solid #3A3F48;border-radius:14px;padding:14px 15px;
+    display:none;z-index:4;box-shadow:0 10px 30px rgba(0,0,0,.5)
+  }
+  .aviso.ver{display:block}
+  .aviso b{display:block;font-size:14.5px;margin-bottom:4px}
+  .aviso p{color:var(--gris);font-size:12.5px;line-height:1.5}
+  .aviso .btns{display:flex;gap:8px;margin-top:11px}
+  .aviso button,.aviso a{flex:1;text-align:center;border-radius:9px;padding:10px 8px;
+    font:600 13px inherit;font-family:inherit;text-decoration:none;cursor:pointer;
+    border:1px solid #3A3F48;background:transparent;color:var(--hueso)}
+  .aviso button.prim{background:var(--hueso);color:var(--negro);border-color:var(--hueso)}
+
 </style>
 </head>
 <body>
@@ -72,6 +88,16 @@
   <div class="marca">PADEL<span>ZONE</span></div>
   <p id="error-txt">No se pudo abrir la aplicación.</p>
   <a id="error-link" href="#">Abrir en el navegador</a>
+</div>
+
+<div class="aviso" id="aviso" role="alert">
+  <b>La aplicación no respondió</b>
+  <p>Puede ser la conexión. Si sigue igual después de reintentar, la última actualización
+    quedó a medias: «Abrir directo» muestra el error que da Google.</p>
+  <div class="btns">
+    <a id="aviso-directo" href="#" target="_blank" rel="noopener">Abrir directo</a>
+    <button class="prim" id="aviso-reintentar">Reintentar</button>
+  </div>
 </div>
 
 <iframe id="app" title="Padel Zone" allow="clipboard-write; fullscreen"></iframe>
@@ -124,14 +150,34 @@ function iniciar() {
   // a pedirla de nuevo: si no, el socio ve el saldo del día que la abrió.
   const destino = APP + params + "&_=" + Date.now();
 
-  marco.addEventListener("load", () => {
-    carga.classList.add("fuera");
-    clearTimeout(reloj);
+  // Que el marco "cargue" no dice nada: una página de error de Google también
+  // carga, y como no se deja mostrar dentro de un marco, queda la pantalla
+  // negra. Lo que vale es el aviso que manda la app cuando arrancó de verdad.
+  let lista = false;
+  window.addEventListener("message", e => {
+    if (e.data && e.data.pz === "listo") {
+      lista = true;
+      carga.classList.add("fuera");
+      document.getElementById("aviso").classList.remove("ver");
+      clearTimeout(reloj);
+    }
   });
 
-  reloj = setTimeout(() => {
-    mostrarError("La aplicación está tardando en responder.", destino);
-  }, 12000);
+  const avisar = () => {
+    if (lista) return;
+    carga.classList.add("fuera");
+    document.getElementById("aviso-directo").href = destino;
+    document.getElementById("aviso").classList.add("ver");
+  };
+  document.getElementById("aviso-reintentar").onclick = () => location.reload();
+
+  // Cargó pero no avisó: se da un margen y, si no llega, se dice.
+  marco.addEventListener("load", () => {
+    clearTimeout(reloj);
+    reloj = setTimeout(avisar, 8000);
+  });
+  // Ni siquiera cargó.
+  reloj = setTimeout(avisar, 20000);
 
   marco.src = destino;
 }
